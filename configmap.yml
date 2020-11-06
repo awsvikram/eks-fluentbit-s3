@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: fluentbit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Parsers_File  parsers.conf
+    [INPUT]
+        Name              tail
+        Tag               order
+        Path              /var/log/containers/*ordering*.log
+        Parser            docker
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     256MB
+        DB.locking true
+        Rotate_Wait 30
+        Docker_Mode On
+        Docker_Mode_Flush 10
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+    [INPUT]
+        Name              tail
+        Tag               kube
+        Path              /var/log/containers/kube*.log
+        Parser            docker
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     10MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+    [FILTER]
+        Name parser
+        Match order
+        Parser dummy
+        Key_Name log
+    [OUTPUT]
+        Name s3
+        Match order
+        bucket $S3_BUCKET
+        region $AWS_REGION
+        store_dir /var/log/fluentbit
+        total_file_size 30M
+        upload_timeout 3m
+    [OUTPUT]
+        Name cloudwatch_logs
+        Match kube
+        region $AWS_REGION
+        log_group_name fluent-bit-cloudwatch
+        log_stream_prefix from-fluent-bit-
+        auto_create_group On
+  parsers.conf: |
+    [PARSER]
+        Name   dummy
+        Format json
